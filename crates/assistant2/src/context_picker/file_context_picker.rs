@@ -18,8 +18,8 @@ use multi_buffer::{MultiBufferPoint, MultiBufferRow};
 use picker::{Picker, PickerDelegate};
 use project::{PathMatchCandidateSet, ProjectPath, WorktreeId};
 use rope::Point;
-use text::SelectionGoal;
-use ui::{prelude::*, ButtonLike, Disclosure, ElevationIndex, ListItem, Tooltip};
+use text::{Selection, SelectionGoal};
+use ui::{prelude::*, ButtonLike, Disclosure, ElevationIndex, ListItem, TintColor, Tooltip};
 use util::ResultExt as _;
 use workspace::{notifications::NotifyResultExt, Workspace};
 
@@ -262,6 +262,8 @@ impl PickerDelegate for FileContextPickerDelegate {
 
                 editor.insert(&full_path, cx);
 
+                let all_selections = editor.selections.disjoint_anchors();
+                let snapshot = editor.buffer().read(cx).snapshot(cx);
                 let end_anchors = {
                     let snapshot = editor.buffer().read(cx).snapshot(cx);
                     editor
@@ -275,13 +277,18 @@ impl PickerDelegate for FileContextPickerDelegate {
                 editor.insert("\n", cx); // Needed to end the fold
 
                 let placeholder = FoldPlaceholder {
-                    render: render_fold_icon_button(IconName::File, file_name.into()),
+                    render: render_fold_icon_button(
+                        IconName::File,
+                        file_name.into(),
+                        all_selections,
+                        snapshot.clone(),
+                    ),
                     ..Default::default()
                 };
 
                 let render_trailer = move |_row, _unfold, _cx: &mut WindowContext| Empty.into_any();
 
-                let buffer = editor.buffer().read(cx).snapshot(cx);
+                let buffer = snapshot.clone();
                 let mut rows_to_fold = BTreeSet::new();
                 let crease_iter = start_anchors
                     .into_iter()
@@ -442,13 +449,23 @@ pub fn render_file_context_entry(
 fn render_fold_icon_button(
     icon: IconName,
     label: SharedString,
+    selections: Arc<[Selection<Anchor>]>,
+    snapshot: MultiBufferSnapshot,
 ) -> Arc<dyn Send + Sync + Fn(FoldId, Range<Anchor>, &mut WindowContext) -> AnyElement> {
-    Arc::new(move |fold_id, _fold_range, _cx| {
+    Arc::new(move |fold_id, fold_range, _cx| {
+        let is_selected = selections.iter().any(|selection| {
+            selection.head().cmp(&fold_range.start, &snapshot).is_le()
+                && selection.tail().cmp(&fold_range.end, &snapshot).is_ge()
+        });
+        dbg!(is_selected);
         ButtonLike::new(fold_id)
             .style(ButtonStyle::Filled)
+            .selected_style(ButtonStyle::Tinted(TintColor::Error))
+            .toggle_state(is_in_text_selection)
             .layer(ElevationIndex::ElevatedSurface)
             .child(Icon::new(icon))
             .child(Label::new(label.clone()).single_line())
+            .set_special()
             .into_any_element()
     })
 }

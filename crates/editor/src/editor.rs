@@ -710,6 +710,7 @@ pub struct Editor {
     tasks: BTreeMap<(BufferId, BufferRow), RunnableTasks>,
     tasks_update_task: Option<Task<()>>,
     previous_search_ranges: Option<Arc<[Range<Anchor>]>>,
+    selected_folds: HashSet<FoldId>,
     breadcrumb_header: Option<String>,
     focused_block: Option<FocusedBlock>,
     next_scroll_position: NextScrollCursorCenterTopBottom,
@@ -1126,7 +1127,7 @@ impl Editor {
         let editor = cx.view().downgrade();
         let fold_placeholder = FoldPlaceholder {
             constrain_width: true,
-            render: Arc::new(move |fold_id, fold_range, cx| {
+            render: Arc::new(move |fold_id, fold_range, is_in_text_selection, cx| {
                 let editor = editor.clone();
                 div()
                     .id(fold_id)
@@ -1368,6 +1369,7 @@ impl Editor {
             tasks_update_task: None,
             linked_edit_ranges: Default::default(),
             previous_search_ranges: None,
+            selected_folds: HashSet::default(),
             breadcrumb_header: None,
             focused_block: None,
             next_scroll_position: NextScrollCursorCenterTopBottom::default(),
@@ -1920,9 +1922,10 @@ impl Editor {
                 )
             });
         }
-        let display_map = self
-            .display_map
-            .update(cx, |display_map, cx| display_map.snapshot(cx));
+        let display_map = self.display_map.update(cx, |display_map, cx| {
+            // display_map.update_selected_folds(&self.selections.disjoint_anchors());
+            display_map.snapshot(cx)
+        });
         let buffer = &display_map.buffer_snapshot;
         self.add_selections_state = None;
         self.select_next_state = None;

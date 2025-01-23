@@ -2,6 +2,7 @@ use super::{
     inlay_map::{InlayBufferRows, InlayChunks, InlayEdit, InlayOffset, InlayPoint, InlaySnapshot},
     Highlights,
 };
+use collections::HashSet;
 use gpui::{AnyElement, ElementId, WindowContext};
 use language::{Chunk, ChunkRenderer, Edit, Point, TextSummary};
 use multi_buffer::{Anchor, AnchorRangeExt, MultiBufferRow, MultiBufferSnapshot, ToOffset};
@@ -158,6 +159,7 @@ impl<'a> FoldMapWriter<'a> {
                 id: FoldId(post_inc(&mut self.0.next_fold_id.0)),
                 range: fold_range,
                 placeholder: fold_text,
+                is_in_text_selection: false, // todo
             });
 
             let inlay_range =
@@ -269,6 +271,7 @@ impl<'a> FoldMapWriter<'a> {
 pub(crate) struct FoldMap {
     snapshot: FoldSnapshot,
     next_fold_id: FoldId,
+    selected_folds: HashSet<FoldId>,
 }
 
 impl FoldMap {
@@ -290,6 +293,7 @@ impl FoldMap {
                 version: 0,
             },
             next_fold_id: FoldId::default(),
+            selected_folds: HashSet::default(),
         };
         let snapshot = this.snapshot.clone();
         (this, snapshot)
@@ -485,6 +489,7 @@ impl FoldMap {
                                             (fold.placeholder.render)(
                                                 fold_id,
                                                 fold.range.0.clone(),
+                                                fold.is_in_text_selection,
                                                 cx,
                                             )
                                         }),
@@ -566,6 +571,29 @@ impl FoldMap {
             self.snapshot.version += 1;
             fold_edits
         }
+    }
+
+    pub fn update_selected_folds(&mut self, selections: &[text::Selection<Anchor>]) {
+        let new_selected_folds = selections
+            .iter()
+            .flat_map(|selection| self.snapshot.folds_in_range(selection.range()))
+            .map(|fold| fold.id)
+            .collect::<HashSet<_>>();
+
+        for new_fold in new_selected_folds.difference(&self.selected_folds) {
+            // add folds to sumtree
+        }
+        for removed_fold in self.selected_folds.difference(&new_selected_folds) {
+            // remove folds from sumtree
+        }
+
+        /*
+            pub(crate) struct FoldMap {
+                snapshot: FoldSnapshot,
+                next_fold_id: FoldId,
+                selected_folds: HashSet<FoldId>,
+            }
+        */
     }
 }
 
@@ -1002,7 +1030,7 @@ impl sum_tree::Summary for TransformSummary {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Hash)]
 pub struct FoldId(usize);
 
 impl From<FoldId> for ElementId {
@@ -1016,6 +1044,7 @@ pub struct Fold {
     pub id: FoldId,
     pub range: FoldRange,
     pub placeholder: FoldPlaceholder,
+    pub is_in_text_selection: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

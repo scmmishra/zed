@@ -351,6 +351,8 @@ pub struct ButtonLike {
     cursor_style: CursorStyle,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
+    // temporary bool for testing
+    special: bool,
 }
 
 impl ButtonLike {
@@ -371,7 +373,13 @@ impl ButtonLike {
             cursor_style: CursorStyle::PointingHand,
             on_click: None,
             layer: None,
+            special: false,
         }
+    }
+
+    pub fn set_special(mut self) -> Self {
+        self.special = true;
+        self
     }
 
     pub fn new_rounded_left(id: impl Into<ElementId>) -> Self {
@@ -479,6 +487,13 @@ impl ParentElement for ButtonLike {
 
 impl RenderOnce for ButtonLike {
     fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+        // if self.special {
+        //     if self.selected {
+        //         println!("selected");
+        //     } else {
+        //         println!("not selected");
+        //     }
+        // }
         let style = self
             .selected_style
             .filter(|_| self.selected)
