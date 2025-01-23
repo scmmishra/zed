@@ -489,7 +489,6 @@ impl FoldMap {
                                             (fold.placeholder.render)(
                                                 fold_id,
                                                 fold.range.0.clone(),
-                                                fold.is_in_text_selection,
                                                 cx,
                                             )
                                         }),

@@ -7,12 +7,12 @@ use std::sync::Arc;
 use editor::actions::FoldAt;
 use editor::display_map::{Crease, FoldId};
 use editor::scroll::Autoscroll;
-use editor::{Anchor, Editor, FoldPlaceholder, ToPoint};
+use editor::{Anchor, Editor, FoldPlaceholder, MultiBuffer, MultiBufferSnapshot, ToPoint};
 use file_icons::FileIcons;
 use fuzzy::PathMatch;
 use gpui::{
-    AnyElement, AppContext, DismissEvent, Empty, FocusHandle, FocusableView, Stateful, Task, View,
-    WeakModel, WeakView,
+    AnyElement, AppContext, DismissEvent, Empty, FocusHandle, FocusableView, Model, Stateful, Task,
+    View, WeakModel, WeakView,
 };
 use multi_buffer::{MultiBufferPoint, MultiBufferRow};
 use picker::{Picker, PickerDelegate};
@@ -261,9 +261,8 @@ impl PickerDelegate for FileContextPickerDelegate {
                 };
 
                 editor.insert(&full_path, cx);
-
-                let all_selections = editor.selections.disjoint_anchors();
                 let snapshot = editor.buffer().read(cx).snapshot(cx);
+
                 let end_anchors = {
                     let snapshot = editor.buffer().read(cx).snapshot(cx);
                     editor
@@ -280,15 +279,14 @@ impl PickerDelegate for FileContextPickerDelegate {
                     render: render_fold_icon_button(
                         IconName::File,
                         file_name.into(),
-                        all_selections,
-                        snapshot.clone(),
+                        editor.buffer().clone(),
                     ),
                     ..Default::default()
                 };
 
                 let render_trailer = move |_row, _unfold, _cx: &mut WindowContext| Empty.into_any();
 
-                let buffer = snapshot.clone();
+                let buffer = editor.buffer().read(cx).snapshot(cx);
                 let mut rows_to_fold = BTreeSet::new();
                 let crease_iter = start_anchors
                     .into_iter()
@@ -449,19 +447,19 @@ pub fn render_file_context_entry(
 fn render_fold_icon_button(
     icon: IconName,
     label: SharedString,
-    selections: Arc<[Selection<Anchor>]>,
-    snapshot: MultiBufferSnapshot,
+    multi_buffer: Model<MultiBuffer>,
 ) -> Arc<dyn Send + Sync + Fn(FoldId, Range<Anchor>, &mut WindowContext) -> AnyElement> {
-    Arc::new(move |fold_id, fold_range, _cx| {
-        let is_selected = selections.iter().any(|selection| {
-            selection.head().cmp(&fold_range.start, &snapshot).is_le()
-                && selection.tail().cmp(&fold_range.end, &snapshot).is_ge()
-        });
-        dbg!(is_selected);
+    Arc::new(move |fold_id, fold_range, cx| {
+        let snapshot = multi_buffer.read(cx).snapshot(cx);
+        let is_selected = snapshot
+            .selections_in_range(&fold_range, true)
+            .next()
+            .is_some();
         ButtonLike::new(fold_id)
             .style(ButtonStyle::Filled)
             .selected_style(ButtonStyle::Tinted(TintColor::Error))
-            .toggle_state(is_in_text_selection)
+            // .toggle_state(is_selected)
+            .toggle_state(is_selected)
             .layer(ElevationIndex::ElevatedSurface)
             .child(Icon::new(icon))
             .child(Label::new(label.clone()).single_line())
